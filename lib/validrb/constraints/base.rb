@@ -2,6 +2,9 @@
 
 module Validrb
   module Constraints
+    # Frozen empty array for reuse
+    EMPTY_ERRORS = [].freeze
+
     # Registry for constraint types
     @registry = {}
 
@@ -35,7 +38,7 @@ module Validrb
 
       # Validate a value and return an array of Error objects (empty if valid)
       def call(value, path: [])
-        return [] if valid?(value)
+        return EMPTY_ERRORS if valid?(value)
 
         [Error.new(path: path, message: error_message(value), code: error_code)]
       end

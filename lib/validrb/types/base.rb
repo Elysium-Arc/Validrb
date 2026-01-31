@@ -13,6 +13,10 @@ module Validrb
       end
     end.freeze
 
+    # Frozen empty collections for reuse (reduces allocations)
+    EMPTY_ERRORS = [].freeze
+    EMPTY_PATH = [].freeze
+
     # Registry for types
     @registry = {}
 
@@ -46,7 +50,7 @@ module Validrb
 
       # Main entry point: coerce and validate a value
       # Returns [coerced_value, errors_array]
-      def call(value, path: [])
+      def call(value, path: EMPTY_PATH)
         coerced = coerce(value)
 
         if coerced.equal?(COERCION_FAILED)
@@ -57,7 +61,7 @@ module Validrb
           return [nil, [Error.new(path: path, message: validation_error_message(coerced), code: :type_error)]]
         end
 
-        [coerced, []]
+        [coerced, EMPTY_ERRORS]
       end
 
       # Override in subclasses: attempt to coerce value to target type

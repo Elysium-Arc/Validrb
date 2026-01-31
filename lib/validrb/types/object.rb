@@ -22,20 +22,20 @@ module Validrb
       end
 
       # Override call to delegate to nested schema
-      def call(value, path: [])
+      def call(value, path: EMPTY_PATH)
         coerced = coerce(value)
 
         if coerced.equal?(COERCION_FAILED)
           return [nil, [Error.new(path: path, message: coercion_error_message(value), code: :type_error)]]
         end
 
-        return [coerced, []] unless @schema
+        return [coerced, EMPTY_ERRORS] unless @schema
 
         # Delegate to nested schema with path prefix
         result = @schema.safe_parse(coerced, path_prefix: path)
 
         if result.success?
-          [result.data, []]
+          [result.data, EMPTY_ERRORS]
         else
           [nil, result.errors.to_a]
         end

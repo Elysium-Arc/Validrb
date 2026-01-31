@@ -5,6 +5,11 @@ module Validrb
   class Schema
     attr_reader :fields, :validators, :options
 
+    # Frozen empty collections for reuse
+    EMPTY_ERRORS = [].freeze
+    EMPTY_HASH = {}.freeze
+    EMPTY_PATH = [].freeze
+
     # Options:
     #   strict: true - raise error on unknown keys
     #   strip: true - remove unknown keys (default behavior)
@@ -17,6 +22,7 @@ module Validrb
       @builder.instance_eval(&block) if block_given?
       @fields.freeze
       @validators.freeze
+      @has_validators = !@validators.empty?
       freeze
     end
 
@@ -38,25 +44,27 @@ module Validrb
     # @param data [Hash] The data to validate (can be passed as positional arg or kwargs)
     # @param path_prefix [Array] Path prefix for error messages
     # @param context [Context, Hash, nil] Optional validation context
-    def safe_parse(data = nil, path_prefix: [], context: nil, **data_kwargs)
+    def safe_parse(data = nil, path_prefix: EMPTY_PATH, context: nil, **data_kwargs)
       # Support both safe_parse({ name: 'John' }) and safe_parse(name: 'John')
       actual_data = data.nil? ? data_kwargs : data
       normalized = normalize_input(actual_data)
-      ctx = normalize_context(context)
-      errors = []
+      ctx = context ? normalize_context(context) : Context.empty
+      errors = nil  # Lazy allocation
       result_data = {}
 
       # Check for unknown keys if strict mode
       if @options[:strict]
-        unknown_keys = normalized.keys - @fields.keys
-        unknown_keys.each do |key|
-          errors << Error.new(path: path_prefix + [key], message: "is not allowed", code: :unknown_key)
+        normalized.each_key do |key|
+          next if @fields.key?(key)
+
+          errors ||= []
+          errors << Error.new(path: path_prefix.empty? ? [key] : (path_prefix + [key]), message: "is not allowed", code: :unknown_key)
         end
       end
 
       # Validate each field
       @fields.each do |name, field|
-        value = fetch_value(normalized, name)
+        value = normalized.fetch(name, Field::MISSING)
         # Pass full data and context for conditional validation (when:/unless:)
         coerced, field_errors = field.call(value, path: path_prefix, data: normalized, context: ctx)
 
@@ -67,28 +75,28 @@ module Validrb
           should_include &&= !(coerced.nil? && field.conditional?)
           result_data[name] = coerced if should_include
         else
+          errors ||= []
           errors.concat(field_errors)
         end
       end
 
       # Passthrough unknown keys
       if @options[:passthrough]
-        unknown_keys = normalized.keys - @fields.keys
-        unknown_keys.each do |key|
-          result_data[key] = normalized[key]
+        normalized.each do |key, value|
+          result_data[key] = value unless @fields.key?(key)
         end
       end
 
-      # Run custom validators only if no field errors
-      if errors.empty?
+      # Run custom validators only if no field errors and has validators
+      if errors.nil? && @has_validators
         validator_errors = run_validators(result_data, path_prefix, ctx)
-        errors.concat(validator_errors)
+        errors = validator_errors unless validator_errors.empty?
       end
 
-      if errors.empty?
-        Success.new(result_data)
-      else
+      if errors
         Failure.new(errors)
+      else
+        Success.new(result_data)
       end
     end
 
@@ -216,26 +224,27 @@ module Validrb
     end
 
     def normalize_input(data)
-      return {} if data.nil?
+      return EMPTY_HASH if data.nil?
 
       raise ArgumentError, "Expected Hash, got #{data.class}" unless data.is_a?(Hash)
 
-      # Convert string keys to symbols
-      data.transform_keys(&:to_sym)
-    end
+      return data if data.empty?
 
-    def fetch_value(data, name)
-      return data[name] if data.key?(name)
+      # Check if conversion is needed (any string keys?)
+      needs_conversion = false
+      data.each_key do |key|
+        if key.is_a?(String)
+          needs_conversion = true
+          break
+        end
+      end
 
-      # Also check string key
-      string_key = name.to_s
-      return data[string_key] if data.key?(string_key)
-
-      Field::MISSING
+      needs_conversion ? data.transform_keys(&:to_sym) : data
     end
 
     def run_validators(data, path_prefix, context = nil)
-      errors = []
+      return EMPTY_ERRORS if @validators.empty?
+
       validator_ctx = ValidatorContext.new(data, path_prefix, context)
 
       @validators.each do |validator|

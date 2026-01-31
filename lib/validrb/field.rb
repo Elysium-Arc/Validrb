@@ -56,6 +56,9 @@ module Validrb
       !@when_condition.nil? || !@unless_condition.nil?
     end
 
+    # Frozen empty array for reuse
+    EMPTY_ERRORS = [].freeze
+
     # Validate a value for this field
     # Returns [coerced_value, errors_array]
     # @param value - the value to validate
@@ -63,7 +66,7 @@ module Validrb
     # @param data - the full input data (for conditional validation)
     # @param context - optional validation context
     def call(value, path: [], data: nil, context: nil)
-      field_path = path + [@name]
+      field_path = path.empty? ? [@name] : (path + [@name])
 
       # Check conditional validation (when:/unless:)
       if conditional? && !should_validate?(data, context)
@@ -241,16 +244,23 @@ module Validrb
     end
 
     def validate_constraints(value, path)
-      errors = []
+      return EMPTY_ERRORS if @constraints.empty?
+
+      errors = nil
       @constraints.each do |constraint|
         constraint_errors = constraint.call(value, path: path)
+        next if constraint_errors.empty?
+
+        errors ||= []
         errors.concat(constraint_errors)
       end
-      errors
+      errors || EMPTY_ERRORS
     end
 
     def validate_refinements(value, path, context = nil)
-      errors = []
+      return EMPTY_ERRORS if @refinements.empty?
+
+      errors = nil
       @refinements.each do |refinement|
         check = refinement[:check]
         # Support context-aware refinements (2 or 3 args)
@@ -265,10 +275,11 @@ module Validrb
         unless result
           message = refinement[:message]
           message = message.call(value) if message.respond_to?(:call)
+          errors ||= []
           errors << Error.new(path: path, message: message, code: :refinement)
         end
       end
-      errors
+      errors || EMPTY_ERRORS
     end
 
     def apply_custom_message(errors)
