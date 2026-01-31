@@ -3,13 +3,20 @@
 module Validrb
   # Schema class with DSL for defining fields
   class Schema
-    attr_reader :fields
+    attr_reader :fields, :validators, :options
 
-    def initialize(&block)
+    # Options:
+    #   strict: true - raise error on unknown keys
+    #   strip: true - remove unknown keys (default behavior)
+    #   passthrough: true - keep unknown keys in output
+    def initialize(**options, &block)
       @fields = {}
+      @validators = []
+      @options = normalize_options(options)
       @builder = Builder.new(self)
       @builder.instance_eval(&block) if block_given?
       @fields.freeze
+      @validators.freeze
       freeze
     end
 
@@ -28,6 +35,15 @@ module Validrb
       errors = []
       result_data = {}
 
+      # Check for unknown keys if strict mode
+      if @options[:strict]
+        unknown_keys = normalized.keys - @fields.keys
+        unknown_keys.each do |key|
+          errors << Error.new(path: path_prefix + [key], message: "is not allowed", code: :unknown_key)
+        end
+      end
+
+      # Validate each field
       @fields.each do |name, field|
         value = fetch_value(normalized, name)
         coerced, field_errors = field.call(value, path: path_prefix)
@@ -38,6 +54,20 @@ module Validrb
         else
           errors.concat(field_errors)
         end
+      end
+
+      # Passthrough unknown keys
+      if @options[:passthrough]
+        unknown_keys = normalized.keys - @fields.keys
+        unknown_keys.each do |key|
+          result_data[key] = normalized[key]
+        end
+      end
+
+      # Run custom validators only if no field errors
+      if errors.empty?
+        validator_errors = run_validators(result_data, path_prefix)
+        errors.concat(validator_errors)
       end
 
       if errors.empty?
@@ -54,7 +84,108 @@ module Validrb
       @fields[field.name] = field
     end
 
+    # Add a custom validator (used by Builder)
+    def add_validator(validator)
+      @validators << validator
+    end
+
+    # Schema composition methods
+
+    # Create a new schema extending this one with additional fields
+    def extend(**options, &block)
+      parent_fields = @fields
+      parent_validators = @validators
+      parent_options = @options
+
+      Schema.new(**parent_options.merge(options)) do
+        # Copy parent fields
+        parent_fields.each_value do |f|
+          @schema.add_field(f)
+        end
+        # Copy parent validators
+        parent_validators.each do |v|
+          @schema.add_validator(v)
+        end
+        # Add new fields/validators from block
+        instance_eval(&block) if block
+      end
+    end
+
+    # Create a new schema with only specified fields
+    def pick(*field_names, **options)
+      field_names = field_names.map(&:to_sym)
+      selected_fields = @fields.slice(*field_names)
+      parent_options = @options
+
+      Schema.new(**parent_options.merge(options)) do
+        selected_fields.each_value do |f|
+          @schema.add_field(f)
+        end
+      end
+    end
+
+    # Create a new schema without specified fields
+    def omit(*field_names, **options)
+      field_names = field_names.map(&:to_sym)
+      remaining_fields = @fields.reject { |k, _| field_names.include?(k) }
+      parent_options = @options
+
+      Schema.new(**parent_options.merge(options)) do
+        remaining_fields.each_value do |f|
+          @schema.add_field(f)
+        end
+      end
+    end
+
+    # Merge another schema into this one (other schema's fields take precedence)
+    def merge(other, **options)
+      raise ArgumentError, "Expected Schema, got #{other.class}" unless other.is_a?(Schema)
+
+      parent_fields = @fields
+      parent_validators = @validators
+      other_fields = other.fields
+      other_validators = other.validators
+      parent_options = @options
+
+      Schema.new(**parent_options.merge(options)) do
+        parent_fields.each_value do |f|
+          @schema.add_field(f) unless other_fields.key?(f.name)
+        end
+        other_fields.each_value do |f|
+          @schema.add_field(f)
+        end
+        parent_validators.each { |v| @schema.add_validator(v) }
+        other_validators.each { |v| @schema.add_validator(v) }
+      end
+    end
+
+    # Create a new schema with all fields optional
+    def partial(**options)
+      parent_fields = @fields
+      parent_options = @options
+
+      Schema.new(**parent_options.merge(options)) do
+        parent_fields.each do |name, f|
+          # Rebuild field as optional
+          field = Field.new(
+            name,
+            f.type,
+            optional: true,
+            **f.options.reject { |k, _| k == :optional }
+          )
+          @schema.add_field(field)
+        end
+      end
+    end
+
     private
+
+    def normalize_options(options)
+      {
+        strict: options[:strict] || false,
+        passthrough: options[:passthrough] || false
+      }
+    end
 
     def normalize_input(data)
       return {} if data.nil?
@@ -73,6 +204,44 @@ module Validrb
       return data[string_key] if data.key?(string_key)
 
       Field::MISSING
+    end
+
+    def run_validators(data, path_prefix)
+      errors = []
+      context = ValidatorContext.new(data, path_prefix)
+
+      @validators.each do |validator|
+        context.instance_exec(data, &validator)
+      end
+
+      context.errors
+    end
+
+    # Context object for custom validators
+    class ValidatorContext
+      attr_reader :errors
+
+      def initialize(data, path_prefix)
+        @data = data
+        @path_prefix = path_prefix
+        @errors = []
+      end
+
+      # Add an error for a specific field
+      def error(field, message, code: :custom)
+        path = @path_prefix + [field.to_sym]
+        @errors << Error.new(path: path, message: message, code: code)
+      end
+
+      # Add a base-level error (not tied to a specific field)
+      def base_error(message, code: :custom)
+        @errors << Error.new(path: @path_prefix, message: message, code: code)
+      end
+
+      # Access field values
+      def [](field)
+        @data[field.to_sym]
+      end
     end
 
     # DSL Builder for defining fields
@@ -94,6 +263,11 @@ module Validrb
       # Shorthand for required field (explicit)
       def required(name, type, **options)
         field(name, type, **options.merge(optional: false))
+      end
+
+      # Add a custom validator block
+      def validate(&block)
+        @schema.add_validator(block)
       end
     end
   end

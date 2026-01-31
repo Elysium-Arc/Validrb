@@ -21,6 +21,8 @@ module Validrb
       @type = resolve_type(type, options)
       @constraints = build_constraints(options)
       @options = extract_options(options)
+      @transform = options[:transform]
+      @message = options[:message]
       freeze
     end
 
@@ -30,6 +32,10 @@ module Validrb
 
     def required?
       !optional?
+    end
+
+    def nullable?
+      @options[:nullable] == true
     end
 
     def has_default?
@@ -46,18 +52,28 @@ module Validrb
     def call(value, path: [])
       field_path = path + [@name]
 
-      # Handle missing/nil values
-      if value.equal?(MISSING) || value.nil?
+      # Handle missing values
+      if value.equal?(MISSING)
+        return handle_missing_value(field_path)
+      end
+
+      # Handle nil values - nullable fields accept nil
+      if value.nil?
+        return [nil, []] if nullable?
+
         return handle_missing_value(field_path)
       end
 
       # Type coercion and validation
       coerced, type_errors = @type.call(value, path: field_path)
-      return [nil, type_errors] unless type_errors.empty?
+      return [nil, apply_custom_message(type_errors)] unless type_errors.empty?
 
       # Constraint validation
       constraint_errors = validate_constraints(coerced, field_path)
-      return [nil, constraint_errors] unless constraint_errors.empty?
+      return [nil, apply_custom_message(constraint_errors)] unless constraint_errors.empty?
+
+      # Apply transform if present
+      coerced = apply_transform(coerced)
 
       [coerced, []]
     end
@@ -123,6 +139,7 @@ module Validrb
     def extract_options(options)
       {
         optional: options[:optional] || false,
+        nullable: options[:nullable] || false,
         default: options[:default]
       }.tap { |h| h.delete(:default) unless options.key?(:default) }.freeze
     end
@@ -130,7 +147,9 @@ module Validrb
     def handle_missing_value(path)
       # Apply default if present
       if has_default?
-        return [default_value, []]
+        value = default_value
+        value = apply_transform(value) if @transform
+        return [value, []]
       end
 
       # Optional fields can be missing
@@ -139,7 +158,8 @@ module Validrb
       end
 
       # Required field is missing
-      error = Error.new(path: path, message: "is required", code: :required)
+      message = @message || "is required"
+      error = Error.new(path: path, message: message, code: :required)
       [nil, [error]]
     end
 
@@ -150,6 +170,20 @@ module Validrb
         errors.concat(constraint_errors)
       end
       errors
+    end
+
+    def apply_custom_message(errors)
+      return errors unless @message
+
+      errors.map do |error|
+        Error.new(path: error.path, message: @message, code: error.code)
+      end
+    end
+
+    def apply_transform(value)
+      return value unless @transform
+
+      @transform.call(value)
     end
   end
 end
