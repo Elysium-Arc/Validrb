@@ -49,6 +49,15 @@ module Validrb
         :length
       end
 
+      def options
+        {
+          exact: @exact,
+          min: @min,
+          max: @max,
+          range: @range
+        }.compact
+      end
+
       private
 
       def validate_options!

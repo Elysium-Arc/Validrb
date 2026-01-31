@@ -1,543 +1,654 @@
 # Validrb
 
-A modern Ruby library for schema validation, type coercion, and configuration management. Define schemas once, get validation, transformation, JSON Schema generation, and environment variable loading — all in one elegant package.
+A powerful Ruby schema validation library with type coercion, inspired by Pydantic and Zod. Define schemas once, validate data with automatic type coercion, generate JSON Schema, and serialize results.
 
-## The Problem
+[![Ruby](https://img.shields.io/badge/ruby-%3E%3D%203.0-ruby.svg)](https://www.ruby-lang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Every Ruby application that handles external data faces the same challenges:
+## Features
 
-- Scattered validation logic across controllers, models, and services
-- Environment variables loaded as strings without type coercion or validation
-- No automatic JSON Schema generation for API documentation
-- dry-validation is powerful but verbose and has a steep learning curve
-- Dotenv/Figaro load config but don't validate or coerce types
-- Serialization, validation, and type definitions are separate concerns
-- Each team rebuilds the same data handling infrastructure
+- **Type Coercion** - Automatic conversion of strings to integers, booleans, dates, etc.
+- **Rich Constraints** - min/max, length, format, enum, and custom validations
+- **Schema Composition** - Extend, merge, pick, omit, and partial schemas
+- **Nested Validation** - Deep validation of objects and arrays
+- **Union Types** - Accept multiple types for a single field
+- **Discriminated Unions** - Polymorphic data with type discriminators
+- **Conditional Validation** - Validate fields based on other field values
+- **Custom Types** - Define your own types with custom coercion
+- **I18n Support** - Internationalized error messages
+- **JSON Schema Generation** - Export schemas to JSON Schema format
+- **Serialization** - Convert validated data to JSON-ready primitives
+- **Zero Dependencies** - Pure Ruby, no external runtime dependencies
 
-## The Solution
+## Installation
 
-Validrb provides unified data validation, transformation, and configuration management as a single Ruby gem. Define your schemas once, and get type-safe parsing, automatic coercion, JSON Schema output, and environment variable loading — with a clean, intuitive API inspired by Pydantic and Zod.
+Add to your Gemfile:
 
-## What You Get
+```ruby
+gem 'validrb'
+```
 
-### Validation Features
-- Type-safe schema definitions
-- Automatic type coercion (strings to integers, dates, booleans)
-- Nested object and array validation
-- Custom validation rules and constraints
-- Discriminated unions for polymorphic data
-- Transform pipelines (input type → output type)
+Or install directly:
 
-### Configuration Features
-- Load settings from ENV, .env files, YAML, JSON
-- Nested configuration with prefixes (APP_DATABASE_HOST)
-- Required vs optional settings with defaults
-- Type coercion for environment variables
-- Sensitive value masking in logs
-- Multiple source priority (ENV > .env > defaults)
+```bash
+gem install validrb
+```
 
-### Developer Features
-- Simple, intuitive DSL
-- Safe parse (returns Result) or strict parse (raises)
-- Automatic JSON Schema generation
-- Clear, actionable error messages
-- Zero runtime dependencies (pure Ruby)
-- Full test helpers and matchers
+## Quick Start
 
-## Use Cases
-
-### API Parameter Validation
-Validate incoming API parameters with automatic coercion and clear error messages. Generate OpenAPI schemas directly from your validation definitions.
-
-### Application Configuration
-Load and validate configuration from environment variables, .env files, and YAML. Get type-safe config objects instead of stringly-typed ENV access.
-
-### Form Object Validation
-Build form objects with complex validation rules, nested attributes, and transformations. Replace scattered ActiveModel validations with centralized schemas.
-
-### Service Object Inputs
-Validate inputs to service objects and interactors. Ensure data integrity at service boundaries with explicit contracts.
-
-### Data Import/ETL
-Parse and validate external data from CSVs, APIs, and webhooks. Transform data during validation with type-safe pipelines.
-
-## How It Works
-
-### Basic Schema
 ```ruby
 require 'validrb'
 
+# Define a schema
 UserSchema = Validrb.schema do
   field :name, :string, min: 1, max: 100
   field :email, :string, format: :email
-  field :age, :integer, min: 0, max: 150, optional: true
+  field :age, :integer, min: 0, optional: true
+  field :role, :string, enum: %w[admin user guest], default: "user"
 end
 
-# Parse with exceptions on failure
-user = UserSchema.parse(params)
+# Parse with automatic coercion
+result = UserSchema.safe_parse({
+  name: "John Doe",
+  email: "john@example.com",
+  age: "25"  # String automatically coerced to integer
+})
 
-# Safe parse returns a Result object
-result = UserSchema.safe_parse(params)
 if result.success?
-  create_user(result.data)
+  puts result.data  # => { name: "John Doe", email: "john@example.com", age: 25, role: "user" }
 else
-  render_errors(result.errors)
+  puts result.errors.full_messages
+end
+
+# Or raise on failure
+user = UserSchema.parse(params)  # Raises Validrb::ValidationError on failure
+```
+
+## Table of Contents
+
+- [Types](#types)
+- [Constraints](#constraints)
+- [Field Options](#field-options)
+- [Schema Options](#schema-options)
+- [Schema Composition](#schema-composition)
+- [Custom Validators](#custom-validators)
+- [Conditional Validation](#conditional-validation)
+- [Union Types](#union-types)
+- [Discriminated Unions](#discriminated-unions)
+- [Refinements](#refinements)
+- [Validation Context](#validation-context)
+- [Custom Types](#custom-types)
+- [Serialization](#serialization)
+- [JSON Schema Generation](#json-schema-generation)
+- [Schema Introspection](#schema-introspection)
+- [I18n Support](#i18n-support)
+- [Error Handling](#error-handling)
+
+## Types
+
+### Built-in Types
+
+| Type | Ruby Class | Coerces From |
+|------|------------|--------------|
+| `:string` | String | Symbol, Numeric |
+| `:integer` | Integer | String, Float (whole numbers) |
+| `:float` | Float | String, Integer |
+| `:boolean` | TrueClass/FalseClass | "true"/"false", "yes"/"no", "1"/"0", 1/0 |
+| `:decimal` | BigDecimal | String, Integer, Float |
+| `:date` | Date | ISO8601 String, DateTime, Time, Unix timestamp |
+| `:datetime` | DateTime | ISO8601 String, Date, Time, Unix timestamp |
+| `:time` | Time | ISO8601 String, DateTime, Date, Unix timestamp |
+| `:array` | Array | (validates items with `of:` option) |
+| `:object` | Hash | (validates with nested `schema:`) |
+
+### Type Examples
+
+```ruby
+schema = Validrb.schema do
+  # Basic types
+  field :name, :string
+  field :count, :integer
+  field :price, :float
+  field :active, :boolean
+
+  # Precise decimals
+  field :amount, :decimal
+
+  # Date/time types
+  field :birth_date, :date
+  field :created_at, :datetime
+  field :timestamp, :time
+
+  # Arrays with typed items
+  field :tags, :array, of: :string
+  field :scores, :array, of: :integer
+
+  # Nested objects
+  field :address, :object, schema: AddressSchema
 end
 ```
 
-### Type Coercion
-Validrb automatically coerces compatible types:
+## Constraints
+
 ```ruby
 schema = Validrb.schema do
-  field :count, :integer
-  field :active, :boolean
-  field :created_at, :datetime
+  # Numeric min/max
+  field :age, :integer, min: 0, max: 150
+  field :price, :float, min: 0.01
+
+  # String length (min/max applied to length)
+  field :username, :string, min: 3, max: 20
+
+  # Exact length
+  field :pin, :string, length: 4
+
+  # Length range
+  field :password, :string, length: 8..128
+
+  # Length with options
+  field :bio, :string, length: { min: 10, max: 500 }
+
+  # Named formats
+  field :email, :string, format: :email
+  field :website, :string, format: :url
+  field :id, :string, format: :uuid
+
+  # Custom regex
+  field :code, :string, format: /\A[A-Z]{2}-\d{4}\z/
+
+  # Enum (allowed values)
+  field :status, :string, enum: %w[pending active completed]
+  field :priority, :integer, enum: [1, 2, 3]
+end
+```
+
+### Available Formats
+
+`:email`, `:url`, `:uuid`, `:phone`, `:alphanumeric`, `:alpha`, `:numeric`, `:hex`, `:slug`
+
+## Field Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `optional` | Boolean | Field can be missing (default: false) |
+| `nullable` | Boolean | Field accepts nil value (default: false) |
+| `default` | Any/Proc | Default value when missing |
+| `message` | String | Custom error message |
+| `preprocess` | Proc | Transform input BEFORE validation |
+| `transform` | Proc | Transform value AFTER validation |
+| `coerce` | Boolean | Enable type coercion (default: true) |
+| `when` | Proc/Symbol | Only validate if condition is true |
+| `unless` | Proc/Symbol | Only validate if condition is false |
+| `union` | Array | Accept any of these types |
+| `literal` | Array | Accept only exact values |
+| `refine` | Proc/Array | Custom validation predicates |
+
+### Examples
+
+```ruby
+schema = Validrb.schema do
+  # Optional field
+  field :nickname, :string, optional: true
+
+  # Nullable field (accepts nil)
+  field :deleted_at, :datetime, nullable: true
+
+  # Default values
+  field :role, :string, default: "user"
+  field :created_at, :datetime, default: -> { DateTime.now }
+
+  # Preprocessing (runs BEFORE validation)
+  field :email, :string, format: :email,
+        preprocess: ->(v) { v.to_s.strip.downcase }
+
+  # Transform (runs AFTER validation)
+  field :tags, :string, transform: ->(v) { v.split(",").map(&:strip) }
+
+  # Disable coercion (strict type checking)
+  field :count, :integer, coerce: false
+
+  # Custom error message
+  field :age, :integer, min: 18, message: "Must be 18 or older"
+end
+```
+
+## Schema Options
+
+```ruby
+# Strict mode - reject unknown keys
+schema = Validrb.schema(strict: true) do
+  field :name, :string
 end
 
-# Strings are coerced automatically
-schema.parse({
-  count: "42",           # => 42
-  active: "true",        # => true
-  created_at: "2024-01-15T10:30:00Z"  # => DateTime object
+schema.safe_parse({ name: "John", extra: "rejected" })
+# => Failure with error on :extra
+
+# Passthrough mode - keep unknown keys
+schema = Validrb.schema(passthrough: true) do
+  field :name, :string
+end
+
+schema.parse({ name: "John", extra: "kept" })
+# => { name: "John", extra: "kept" }
+```
+
+## Schema Composition
+
+```ruby
+BaseSchema = Validrb.schema do
+  field :id, :integer
+  field :created_at, :datetime, default: -> { DateTime.now }
+end
+
+# Extend with additional fields
+UserSchema = BaseSchema.extend do
+  field :name, :string
+  field :email, :string, format: :email
+end
+
+# Pick specific fields
+PublicUserSchema = UserSchema.pick(:id, :name)
+
+# Omit specific fields
+SafeUserSchema = UserSchema.omit(:password)
+
+# Merge two schemas (second takes precedence)
+MergedSchema = Schema1.merge(Schema2)
+
+# Make all fields optional (useful for PATCH updates)
+UpdateSchema = UserSchema.partial
+```
+
+## Custom Validators
+
+```ruby
+schema = Validrb.schema do
+  field :password, :string, min: 8
+  field :password_confirmation, :string
+
+  # Cross-field validation
+  validate do |data|
+    if data[:password] != data[:password_confirmation]
+      error(:password_confirmation, "doesn't match password")
+    end
+  end
+
+  # Base-level errors (not tied to a field)
+  validate do |data|
+    if data[:items]&.empty?
+      base_error("At least one item is required")
+    end
+  end
+end
+```
+
+## Conditional Validation
+
+```ruby
+schema = Validrb.schema do
+  field :account_type, :string, enum: %w[personal business]
+
+  # Validate only when condition is true
+  field :company_name, :string,
+        when: ->(data) { data[:account_type] == "business" }
+
+  # Validate unless condition is true
+  field :personal_id, :string,
+        unless: ->(data) { data[:account_type] == "business" }
+
+  # Symbol shorthand (checks if field is truthy)
+  field :subscribe, :boolean, default: false
+  field :email, :string, format: :email, when: :subscribe
+end
+```
+
+## Union Types
+
+```ruby
+schema = Validrb.schema do
+  # Accept multiple types (tries in order, put specific types first)
+  field :id, :string, union: [:integer, :string]
+end
+
+schema.parse({ id: 123 })      # => { id: 123 }
+schema.parse({ id: "abc-123" }) # => { id: "abc-123" }
+schema.parse({ id: "456" })     # => { id: 456 } (coerced to integer)
+```
+
+## Discriminated Unions
+
+For polymorphic data, use discriminated unions to select the right schema based on a discriminator field:
+
+```ruby
+CreditCardSchema = Validrb.schema do
+  field :type, :string
+  field :card_number, :string
+  field :expiry, :string
+end
+
+PayPalSchema = Validrb.schema do
+  field :type, :string
+  field :email, :string, format: :email
+end
+
+PaymentSchema = Validrb.schema do
+  field :payment, :discriminated_union,
+        discriminator: :type,
+        mapping: {
+          "credit_card" => CreditCardSchema,
+          "paypal" => PayPalSchema
+        }
+end
+
+PaymentSchema.parse({
+  payment: { type: "credit_card", card_number: "4111...", expiry: "12/25" }
+})
+
+PaymentSchema.parse({
+  payment: { type: "paypal", email: "user@example.com" }
 })
 ```
 
-### Transforms
-Transform data during validation — input and output types can differ:
+## Refinements
+
+Add custom validation predicates beyond built-in constraints:
+
 ```ruby
-DateSchema = Validrb.schema do
-  field :date, :string, transform: ->(s) { Date.parse(s) }
+schema = Validrb.schema do
+  # Simple refinement
+  field :age, :integer, refine: ->(v) { v >= 18 }
+
+  # With custom message
+  field :password, :string,
+        refine: {
+          check: ->(v) { v.match?(/[A-Z]/) },
+          message: "must contain an uppercase letter"
+        }
+
+  # Multiple refinements
+  field :code, :string,
+        refine: [
+          { check: ->(v) { v.length >= 8 }, message: "too short" },
+          { check: ->(v) { v.match?(/\d/) }, message: "needs a digit" },
+          { check: ->(v) { v.match?(/[A-Z]/) }, message: "needs uppercase" }
+        ]
+end
+```
+
+## Validation Context
+
+Pass request-level data through the validation pipeline:
+
+```ruby
+schema = Validrb.schema do
+  field :amount, :decimal,
+        refine: ->(value, ctx) {
+          ctx.nil? || value <= ctx[:max_amount]
+        }
+
+  field :admin_only, :string,
+        when: ->(data, ctx) { ctx && ctx[:is_admin] }
+
+  validate do |data, ctx|
+    if ctx && ctx[:restricted] && data[:amount] > 100
+      error(:amount, "exceeds limit in restricted mode")
+    end
+  end
 end
 
-result = DateSchema.parse({ date: "2024-01-15" })
-result[:date]  # => #<Date: 2024-01-15>
+# Create and pass context
+ctx = Validrb.context(max_amount: 1000, is_admin: true)
+result = schema.safe_parse(data, context: ctx)
 ```
 
-### Settings from Environment
+## Custom Types
+
+Define your own types with custom coercion and validation:
+
 ```ruby
-class AppConfig < Validrb::Settings
-  env_prefix "MYAPP"
-  
-  setting :port, :integer, default: 3000
-  setting :database_url, :string, required: true
-  setting :debug, :boolean, default: false
-  setting :redis, RedisConfig  # Nested config objects
+Validrb.define_type(:money) do
+  coerce { |v| BigDecimal(v.to_s.gsub(/[$,]/, "")) }
+  validate { |v| v >= 0 }
+  error_message { "must be a valid money amount" }
 end
 
-# Reads MYAPP_PORT, MYAPP_DATABASE_URL, MYAPP_DEBUG
-config = AppConfig.load
-config.port        # => 3000 (coerced from "3000")
-config.debug       # => false (coerced from "false")
+Validrb.define_type(:slug) do
+  coerce { |v| v.to_s.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/^-|-$/, "") }
+  validate { |v| v.match?(/\A[a-z0-9]+(?:-[a-z0-9]+)*\z/) }
+end
+
+schema = Validrb.schema do
+  field :price, :money
+  field :url_slug, :slug
+end
+
+schema.parse({ price: "$1,234.56", url_slug: "Hello World!" })
+# => { price: #<BigDecimal:1234.56>, url_slug: "hello-world" }
 ```
 
-### Discriminated Unions
-Handle polymorphic data elegantly:
-```ruby
-PaymentSchema = Validrb.union(:type,
-  card: Validrb.schema {
-    field :card_number, :string
-    field :cvv, :string, length: 3..4
-  },
-  bank: Validrb.schema {
-    field :account_number, :string
-    field :routing_number, :string
-  }
-)
+## Serialization
 
-# Validates only the fields for the matching type
-PaymentSchema.parse({ type: "card", card_number: "4111...", cvv: "123" })
+Convert validated data to JSON-ready primitives:
+
+```ruby
+schema = Validrb.schema do
+  field :name, :string
+  field :created_at, :date
+  field :amount, :decimal
+end
+
+result = schema.safe_parse({
+  name: "Test",
+  created_at: "2024-01-15",
+  amount: "99.99"
+})
+
+# Serialize to hash with primitives
+result.dump
+# => { "name" => "Test", "created_at" => "2024-01-15", "amount" => "99.99" }
+
+# Serialize to JSON
+result.to_json
+# => '{"name":"Test","created_at":"2024-01-15","amount":"99.99"}'
+
+# Schema-level dump (parse + serialize)
+schema.dump(data)           # Raises on validation error
+schema.safe_dump(data)      # Returns Result
 ```
 
-### JSON Schema Generation
+## JSON Schema Generation
+
+Generate JSON Schema from your Validrb schemas:
+
 ```ruby
-UserSchema.to_json_schema
+schema = Validrb.schema do
+  field :id, :integer
+  field :name, :string, min: 1, max: 100
+  field :email, :string, format: :email
+  field :age, :integer, optional: true, min: 0
+  field :role, :string, enum: %w[admin user], default: "user"
+end
+
+json_schema = schema.to_json_schema
 # => {
-#   "type": "object",
-#   "required": ["name", "email"],
-#   "properties": {
-#     "name": { "type": "string", "minLength": 1, "maxLength": 100 },
-#     "email": { "type": "string", "format": "email" },
-#     "age": { "type": "integer", "minimum": 0, "maximum": 150 }
+#   "$schema" => "https://json-schema.org/draft-07/schema#",
+#   "type" => "object",
+#   "required" => ["id", "name", "email"],
+#   "properties" => {
+#     "id" => { "type" => "integer" },
+#     "name" => { "type" => "string", "minLength" => 1, "maxLength" => 100 },
+#     "email" => { "type" => "string" },
+#     "age" => { "type" => "integer", "minimum" => 0 },
+#     "role" => { "type" => "string", "enum" => ["admin", "user"], "default" => "user" }
 #   }
 # }
 ```
 
-## Architecture Overview
+## OpenAPI 3.0 Generation
 
-### Core Components
-- **Schema**: Definition DSL and validation engine
-- **Types**: Built-in types with coercion logic
-- **Result**: Success/Failure wrapper for safe parsing
-- **Settings**: Environment and config file loading
-- **JsonSchema**: JSON Schema generator
+Generate complete OpenAPI 3.0 specifications from your schemas:
 
-### Type System
-- Primitives: `string`, `integer`, `float`, `boolean`, `symbol`
-- Temporal: `date`, `datetime`, `time`
-- Complex: `array`, `hash`, `object`
-- Special: `any`, `nil`, `literal`, `enum`, `union`
+```ruby
+# Create an OpenAPI generator
+generator = Validrb::OpenAPI.generator
 
-### Validation Pipeline
-1. Type checking and coercion
-2. Constraint validation (min, max, format, etc.)
-3. Custom rule evaluation
-4. Transform application
-5. Result assembly
+# Register schemas
+generator.register("User", UserSchema)
+generator.register("CreateUser", CreateUserSchema)
 
-## Project Status
+# Build paths
+paths = Validrb::OpenAPI::PathBuilder.new(generator)
+  .get("/users", summary: "List users")
+  .post("/users", schema: CreateUserSchema, summary: "Create user")
+  .get("/users/{id}", summary: "Get user")
+  .put("/users/{id}", schema: UpdateUserSchema, summary: "Update user")
+  .to_h
 
-**Current Phase**: Phase 1 - Foundation  
-**Status**: Planning  
-**Target Release**: v0.1.0
+# Generate the OpenAPI document
+doc = generator.generate(
+  info: {
+    title: "My API",
+    version: "1.0.0",
+    description: "API documentation"
+  },
+  servers: ["https://api.example.com"],
+  paths: paths
+)
 
-This gem is in active development. APIs and features may change before the 1.0 release.
+# Export as JSON or YAML
+puts generator.to_json(info: { title: "My API", version: "1.0.0" })
+puts generator.to_yaml(info: { title: "My API", version: "1.0.0" })
+```
 
-### What's Working
-- Project structure and planning
-- Documentation framework
-- API design
+### Import from OpenAPI/JSON Schema
 
-### In Progress
-- Core type system
-- Basic schema DSL
-- Parse and safe_parse methods
+Create Validrb schemas from existing OpenAPI or JSON Schema definitions:
 
-### Next Up
-- Constraint validators
-- Error message formatting
-- Test framework setup
+```ruby
+# Import from OpenAPI document
+openapi_doc = JSON.parse(File.read("openapi.json"))
+importer = Validrb::OpenAPI.import(openapi_doc)
 
-## Roadmap
+# Access imported schemas
+user_schema = importer["User"]
+post_schema = importer["Post"]
 
-### Version Timeline
+# Use for validation
+result = user_schema.safe_parse(params)
 
-#### v0.1.0 - Foundation (Weeks 1-2) - IN PROGRESS
-**Goal**: Basic schema validation with type coercion
+# Import a single JSON Schema
+json_schema = {
+  "type" => "object",
+  "properties" => {
+    "name" => { "type" => "string", "minLength" => 1 },
+    "age" => { "type" => "integer", "minimum" => 0 }
+  },
+  "required" => ["name"]
+}
 
-**Week 1**
-- Gem skeleton and gemspec configuration
-- Core type definitions (string, integer, boolean, etc.)
-- Schema DSL implementation
-- Field definition and registration
-- Basic type coercion logic
+schema = Validrb::OpenAPI.import_schema(json_schema)
+schema.parse({ name: "John", age: 25 })
+```
 
-**Week 2**
-- Parse and safe_parse methods
-- Result object (Success/Failure)
-- Error collection and formatting
-- Basic constraint validators (min, max, length)
-- RSpec setup with comprehensive tests
+## Schema Introspection
 
-**Deliverable**: Working schema validation with coercion
+Inspect schema structure programmatically:
 
----
+```ruby
+schema.field_names          # => [:id, :name, :email, :age, :role]
+schema.required_fields      # => [:id, :name, :email]
+schema.optional_fields      # => [:age]
+schema.fields_with_defaults # => [:role]
+schema.conditional_fields   # => []
 
-#### v0.2.0 - Constraints & Rules (Weeks 3-4) - PLANNED
-**Goal**: Rich validation constraints and custom rules
+# Get field details
+field = schema.field(:name)
+field.type.type_name        # => "string"
+field.constraint_values     # => { min: 1, max: 100 }
+field.optional?             # => false
+```
 
-**Week 3**
-- Format validators (email, url, uuid, etc.)
-- Pattern matching (regex)
-- Enum and literal types
-- Inclusion/exclusion validators
-- Nested object validation
+## I18n Support
 
-**Week 4**
-- Array validation with item schemas
-- Custom rule blocks
-- Cross-field validation
-- Conditional validation (when/then)
-- Error message customization
+Customize error messages with internationalization:
 
-**Deliverable**: Full constraint system with custom rules
+```ruby
+# Add custom translations
+Validrb::I18n.add_translations(:en,
+  required: "cannot be blank",
+  min: "must be at least %{value}"
+)
 
----
+# Switch locale
+Validrb::I18n.add_translations(:es,
+  required: "es requerido",
+  min: "debe ser al menos %{value}"
+)
+Validrb::I18n.locale = :es
 
-#### v0.3.0 - Transforms & Unions (Weeks 5-6) - PLANNED
-**Goal**: Data transformation and polymorphic types
+# Reset to defaults
+Validrb::I18n.reset!
+```
 
-**Week 5**
-- Transform pipeline implementation
-- Input/output type tracking
-- Chained transforms
-- Built-in transforms (strip, downcase, etc.)
-- Default value handling
+## Error Handling
 
-**Week 6**
-- Union type implementation
-- Discriminated union support
-- Efficient discriminator matching
-- Union error aggregation
-- Optional and nullable fields
+```ruby
+# safe_parse returns a Result object
+result = schema.safe_parse(data)
 
-**Deliverable**: Transform pipelines and union types
+result.success?  # => true/false
+result.failure?  # => true/false
+result.data      # => validated data (if success)
+result.errors    # => ErrorCollection (if failure)
 
----
+# Error details
+result.errors.each do |error|
+  error.path      # => [:user, :email]
+  error.message   # => "must be a valid email"
+  error.code      # => :format
+  error.to_s      # => "user.email must be a valid email"
+end
 
-#### v0.4.0 - Settings & Config (Weeks 7-8) - PLANNED
-**Goal**: Environment and configuration management
+# Error collection methods
+result.errors.messages       # => ["must be a valid email", ...]
+result.errors.full_messages  # => ["user.email must be a valid email", ...]
+result.errors.to_h           # => { [:user, :email] => ["must be a valid email"] }
 
-**Week 7**
-- Settings base class
-- ENV variable loading
-- Dotenv file parsing
-- Type coercion for env strings
-- Prefix and naming conventions
-
-**Week 8**
-- Nested settings support
-- YAML/JSON config sources
-- Source priority system
-- Required setting validation
-- Sensitive value masking
-
-**Deliverable**: Complete configuration management system
-
----
-
-#### v0.5.0 - JSON Schema (Weeks 9-10) - PLANNED
-**Goal**: JSON Schema generation and OpenAPI support
-
-**Week 9**
-- JSON Schema generator core
-- Type mapping to JSON Schema types
-- Constraint mapping (min → minimum, etc.)
-- Nested object schema generation
-- Array schema generation
-
-**Week 10**
-- Union/anyOf schema generation
-- Discriminated union schema support
-- Ref and definitions for reuse
-- OpenAPI 3.0 compatibility
-- Schema export utilities
-
-**Deliverable**: Automatic JSON Schema generation
-
----
-
-#### v1.0.0 - Production Release (Weeks 11-12) - PLANNED
-**Goal**: Public gem release with stable API
-
-**Week 11**
-- Complete README documentation
-- API reference documentation
-- Configuration guide
-- Migration guide from dry-validation
-- Example applications
-- Troubleshooting guide
-
-**Week 12**
-- Performance optimization
-- Memory usage audit
-- CI/CD pipeline setup
-- Security review
-- RubyGems.org release
-- Public announcement
-
-**Deliverable**: Production-ready 1.0.0 release
-
----
-
-### Future Versions (Post 1.0)
-
-#### v1.1.0 - Rails Integration
-- ActiveModel compatibility layer
-- Form builder helpers
-- Controller parameter integration
-- I18n for error messages
-
-#### v1.2.0 - Advanced Types
-- Recursive schema support
-- Lazy schema evaluation
-- Branded/nominal types
-- Refinement types
-
-#### v1.3.0 - Performance
-- Schema compilation/caching
-- JIT-friendly hot paths
-- Benchmark suite
-- Memory optimization
-
-#### v2.0.0 - Extended Ecosystem
-- Sorbet/RBS type generation
-- GraphQL type generation
-- Protocol Buffers support
-- MessagePack serialization
-
-## Planned Features
-
-### Phase 1: Foundation
-- Core type system (string, integer, boolean, float, symbol)
-- Schema DSL with field definitions
-- Basic type coercion
-- Parse and safe_parse methods
-- Result object (Success/Failure)
-- Error collection and formatting
-- Basic constraints (min, max, length)
-- RSpec test setup
-
-### Phase 2: Constraints & Rules
-- Format validators (email, url, uuid, regex)
-- Enum and literal types
-- Inclusion/exclusion validators
-- Nested object validation
-- Array validation with item schemas
-- Custom rule blocks
-- Cross-field validation
-- Conditional validation (when/then)
-- Error message customization
-
-### Phase 3: Transforms & Unions
-- Transform pipeline implementation
-- Input/output type tracking
-- Chained transforms
-- Built-in transforms (strip, downcase, etc.)
-- Default value handling
-- Union type implementation
-- Discriminated union support
-- Optional and nullable fields
-
-### Phase 4: Settings & Config
-- Settings base class
-- ENV variable loading
-- Dotenv file parsing
-- Type coercion for env strings
-- Prefix and naming conventions
-- Nested settings support
-- YAML/JSON config sources
-- Source priority system
-- Sensitive value masking
-
-### Phase 5: JSON Schema
-- JSON Schema generator core
-- Type mapping to JSON Schema types
-- Constraint mapping
-- Nested object schema generation
-- Array schema generation
-- Union/anyOf schema generation
-- Discriminated union schema support
-- OpenAPI 3.0 compatibility
-
-### Phase 6: Production Ready
-- Complete documentation
-- API reference
-- Migration guide from dry-validation
-- Example applications
-- Performance optimization
-- CI/CD pipeline
-- Security review
-- Initial gem release
-
-### Future Enhancements
-- Rails/ActiveModel integration
-- I18n for error messages
-- Recursive schema support
-- Branded/nominal types
-- Schema compilation/caching
-- Sorbet/RBS type generation
-- GraphQL type generation
-- Protocol Buffers support
+# parse raises on failure
+begin
+  schema.parse(invalid_data)
+rescue Validrb::ValidationError => e
+  e.errors  # => ErrorCollection
+  e.message # => Summary of errors
+end
+```
 
 ## Requirements
 
-- Ruby 3.0 or higher
-- No runtime dependencies (pure Ruby)
+- Ruby >= 3.0
+- No runtime dependencies
 
-### Optional Dependencies
-- `dotenv` - For .env file loading in Settings
-- `oj` - For faster JSON Schema serialization
+## Development
 
-## Comparison with Alternatives
+```bash
+# Install dependencies
+bundle install
 
-| Feature | Validrb | dry-validation | ActiveModel | Pydantic |
-|---------|---------|----------------|-------------|----------|
-| Type coercion | ✅ | ✅ | ❌ | ✅ |
-| Settings/ENV loading | ✅ | ❌ | ❌ | ✅ |
-| JSON Schema generation | ✅ | ❌ | ❌ | ✅ |
-| Transforms | ✅ | ❌ | ❌ | ✅ |
-| Discriminated unions | ✅ | ❌ | ❌ | ❌ |
-| Safe parse (Result) | ✅ | ✅ | ❌ | ❌ |
-| Learning curve | Low | High | Low | Low |
-| Dependencies | 0 | Many | Rails | Many |
+# Run tests
+bundle exec rspec
 
-## Documentation
-
-Documentation is organized into several resources:
-
-### Repository Documentation
-- README: Project overview and getting started
-- ARCHITECTURE.md: Technical design decisions
-- CONTRIBUTING.md: Development guidelines
-- CHANGELOG.md: Version history
-
-### Guides (Planned)
-- Getting Started Guide
-- Schema Definition Reference
-- Settings & Configuration Guide
-- JSON Schema Generation Guide
-- Migration from dry-validation
-- Best Practices
-
-### API Reference (Planned)
-- Schema DSL
-- Built-in Types
-- Constraints
-- Settings Class
-- Result Object
-
-## Development Approach
-
-Development follows a structured approach with clear phases. Each phase delivers a working, tested increment.
-
-### Development Workflow
-1. Phase planning and issue creation
-2. Feature breakdown into small PRs
-3. Test-driven development
-4. Pull request with review
-5. Documentation updates
-6. Release and changelog
-
-### Testing Strategy
-- Unit tests for all types and validators
-- Integration tests for schema parsing
-- Property-based testing for coercion
-- Benchmark tests for performance
-- Comparison tests against dry-validation
-
-### Design Principles
-- **Simplicity over features**: Easy API for common cases
-- **Explicit over implicit**: No magic, clear behavior
-- **Performance matters**: Hot paths are optimized
-- **Zero dependencies**: Pure Ruby, no bloat
-- **Inspired by the best**: Learn from Pydantic and Zod
+# Run demo
+bundle exec ruby demo.rb
+```
 
 ## Contributing
 
-Contributions are welcome once the initial foundation is established. Guidelines will be provided in CONTRIBUTING.md.
-
-### Areas for Contribution
-- Additional built-in types
-- Format validators
-- Documentation improvements
-- Performance optimizations
-- Bug fixes and test coverage
+Bug reports and pull requests are welcome on GitHub.
 
 ## License
 
-MIT License. See LICENSE file for details.
+MIT License. See [LICENSE](LICENSE) for details.
 
-## Author
+## Credits
 
-[Your Name]
-
-## Links
-
-- Repository: https://github.com/[username]/validrb
-- Documentation: https://github.com/[username]/validrb/wiki
-- Issues: https://github.com/[username]/validrb/issues
-- RubyGems: https://rubygems.org/gems/validrb (after release)
-
----
-
-**Note**: This is a greenfield project in initial development. Watch the repository for updates as features are implemented.
+Inspired by [Pydantic](https://pydantic.dev/) (Python) and [Zod](https://zod.dev/) (TypeScript).

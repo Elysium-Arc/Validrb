@@ -9,26 +9,35 @@ Gem::Specification.new do |spec|
   spec.email = ["validrb@example.com"]
 
   spec.summary = "A Ruby schema validation library with type coercion"
-  spec.description = "Validrb is a Ruby schema validation library inspired by Pydantic/Zod, " \
-                     "providing type coercion, constraint validation, and a clean DSL for " \
-                     "defining data schemas."
+  spec.description = <<~DESC
+    Validrb is a powerful Ruby schema validation library inspired by Pydantic and Zod.
+    It provides type coercion, rich constraints, schema composition, union types,
+    discriminated unions, custom validators, JSON Schema generation, and serialization.
+    Zero runtime dependencies, pure Ruby.
+  DESC
   spec.homepage = "https://github.com/validrb/validrb"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.0.0"
 
-  spec.metadata["homepage_uri"] = spec.homepage
-  spec.metadata["source_code_uri"] = spec.homepage
-  spec.metadata["changelog_uri"] = "#{spec.homepage}/blob/main/CHANGELOG.md"
+  spec.metadata = {
+    "homepage_uri" => spec.homepage,
+    "source_code_uri" => spec.homepage,
+    "changelog_uri" => "#{spec.homepage}/blob/main/CHANGELOG.md",
+    "documentation_uri" => spec.homepage,
+    "bug_tracker_uri" => "#{spec.homepage}/issues",
+    "rubygems_mfa_required" => "true"
+  }
 
   spec.files = Dir.chdir(__dir__) do
     `git ls-files -z`.split("\x0").reject do |f|
       (File.expand_path(f) == __FILE__) ||
-        f.start_with?(*%w[bin/ test/ spec/ features/ .git .github appveyor Gemfile])
+        f.start_with?(*%w[bin/ test/ spec/ features/ .git .github appveyor Gemfile]) ||
+        f == "demo.rb"
     end
   end
   spec.bindir = "exe"
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
-  # Zero runtime dependencies
+  # Zero runtime dependencies - pure Ruby
 end

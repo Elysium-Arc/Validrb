@@ -21,8 +21,11 @@ module Validrb
     end
 
     # Parse data and raise ValidationError on failure
-    def parse(data, path_prefix: [])
-      result = safe_parse(data, path_prefix: path_prefix)
+    # @param data [Hash] The data to validate
+    # @param path_prefix [Array] Path prefix for error messages
+    # @param context [Context, Hash, nil] Optional validation context
+    def parse(data, path_prefix: [], context: nil)
+      result = safe_parse(data, path_prefix: path_prefix, context: context)
 
       raise ValidationError, result.errors if result.failure?
 
@@ -30,8 +33,12 @@ module Validrb
     end
 
     # Parse data and return Result (Success or Failure)
-    def safe_parse(data, path_prefix: [])
+    # @param data [Hash] The data to validate
+    # @param path_prefix [Array] Path prefix for error messages
+    # @param context [Context, Hash, nil] Optional validation context
+    def safe_parse(data, path_prefix: [], context: nil)
       normalized = normalize_input(data)
+      ctx = normalize_context(context)
       errors = []
       result_data = {}
 
@@ -46,11 +53,15 @@ module Validrb
       # Validate each field
       @fields.each do |name, field|
         value = fetch_value(normalized, name)
-        coerced, field_errors = field.call(value, path: path_prefix)
+        # Pass full data and context for conditional validation (when:/unless:)
+        coerced, field_errors = field.call(value, path: path_prefix, data: normalized, context: ctx)
 
         if field_errors.empty?
           # Only include in result if value is not nil or field has a value
-          result_data[name] = coerced unless coerced.nil? && field.optional? && !field.has_default?
+          # Also skip if field was conditionally skipped (conditional? && value is nil)
+          should_include = !(coerced.nil? && field.optional? && !field.has_default?)
+          should_include &&= !(coerced.nil? && field.conditional?)
+          result_data[name] = coerced if should_include
         else
           errors.concat(field_errors)
         end
@@ -66,7 +77,7 @@ module Validrb
 
       # Run custom validators only if no field errors
       if errors.empty?
-        validator_errors = run_validators(result_data, path_prefix)
+        validator_errors = run_validators(result_data, path_prefix, ctx)
         errors.concat(validator_errors)
       end
 
@@ -187,6 +198,19 @@ module Validrb
       }
     end
 
+    def normalize_context(context)
+      case context
+      when Context
+        context
+      when Hash
+        Context.new(**context)
+      when nil
+        Context.empty
+      else
+        raise ArgumentError, "Expected Context or Hash, got #{context.class}"
+      end
+    end
+
     def normalize_input(data)
       return {} if data.nil?
 
@@ -206,24 +230,29 @@ module Validrb
       Field::MISSING
     end
 
-    def run_validators(data, path_prefix)
+    def run_validators(data, path_prefix, context = nil)
       errors = []
-      context = ValidatorContext.new(data, path_prefix)
+      validator_ctx = ValidatorContext.new(data, path_prefix, context)
 
       @validators.each do |validator|
-        context.instance_exec(data, &validator)
+        if validator.arity <= 1
+          validator_ctx.instance_exec(data, &validator)
+        else
+          validator_ctx.instance_exec(data, context, &validator)
+        end
       end
 
-      context.errors
+      validator_ctx.errors
     end
 
     # Context object for custom validators
     class ValidatorContext
-      attr_reader :errors
+      attr_reader :errors, :context
 
-      def initialize(data, path_prefix)
+      def initialize(data, path_prefix, context = nil)
         @data = data
         @path_prefix = path_prefix
+        @context = context
         @errors = []
       end
 

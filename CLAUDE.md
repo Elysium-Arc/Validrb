@@ -4,9 +4,9 @@
 
 Validrb is a Ruby schema validation library with type coercion, inspired by Pydantic (Python) and Zod (TypeScript). It provides a clean DSL for defining data schemas with automatic type coercion, constraint validation, and detailed error reporting.
 
-## Current Status: Phase 2 Complete
+## Current Status: Phase 5 Complete
 
-All core functionality implemented and tested (444 tests passing).
+All core functionality implemented and tested (719 tests passing).
 
 ## Architecture
 
@@ -14,53 +14,72 @@ All core functionality implemented and tested (444 tests passing).
 Validrb.schema { ... }
        │
        ▼
-    Schema (DSL, parse/safe_parse, composition)
+    Schema (DSL, parse/safe_parse, composition, introspection)
        │
-       ├── Validators (custom cross-field validation)
-       │
-       ▼
-    Field (type + constraints + transform + nullable)
-       │
-       ├──────────────┐
-       ▼              ▼
-    Types          Constraints
-    (coerce→validate) (min/max/enum/format)
+       ├── Validators (custom cross-field validation + context)
+       ├── Serialization (dump/to_json)
        │
        ▼
-    Result (Success/Failure)
-    Errors (path-tracked)
+    Field (preprocess → type → constraints → refinements → transform)
+       │
+       ├── Conditional (when:/unless: with context)
+       ├── Coercion modes (coerce: true/false)
+       ├── Literal types (exact value matching)
+       ├── Refinements (custom predicates)
+       │
+       ├──────────────┬──────────────┐
+       ▼              ▼              ▼
+    Types          Constraints    Context
+    (coerce→validate) (min/max/enum/format)  (request context)
+       │
+       ├── Union types
+       ├── Discriminated unions
+       ├── Custom types
+       │
+       ▼
+    Result (Success/Failure + serialization)
+    Errors (path-tracked, I18n)
 ```
 
 ## File Structure
 
 ```
 lib/
-├── validrb.rb                    # Main entry point, requires all components
+├── validrb.rb                    # Main entry point
 └── validrb/
-    ├── version.rb                # VERSION = "0.2.0"
+    ├── version.rb                # VERSION = "0.5.0"
+    ├── i18n.rb                   # I18n support for error messages
     ├── errors.rb                 # Error, ErrorCollection, ValidationError
     ├── result.rb                 # Success, Failure result types
-    ├── field.rb                  # Field definition (type + constraints + options)
+    ├── context.rb                # Validation context
+    ├── field.rb                  # Field definition with all options
     ├── schema.rb                 # Schema class with DSL Builder + composition
+    ├── custom_type.rb            # Custom type DSL
+    ├── introspection.rb          # Schema/field introspection
+    ├── serializer.rb             # Serialization to primitives/JSON
+    ├── openapi.rb                # OpenAPI 3.0 generation and import
     ├── types/
-    │   ├── base.rb               # Base type class + registry + COERCION_FAILED sentinel
-    │   ├── string.rb             # String type (coerces Symbol, Numeric)
-    │   ├── integer.rb            # Integer type (coerces String, whole Floats)
-    │   ├── float.rb              # Float type (coerces String, Integer)
-    │   ├── boolean.rb            # Boolean type (coerces "true"/"false", 1/0, "yes"/"no")
-    │   ├── array.rb              # Array type with optional item type (of: :type)
-    │   ├── object.rb             # Object type for nested schemas (schema: NestedSchema)
-    │   ├── date.rb               # Date type (coerces ISO8601 strings, timestamps)
-    │   ├── datetime.rb           # DateTime type (coerces ISO8601, timestamps)
-    │   ├── time.rb               # Time type (coerces ISO8601, timestamps)
-    │   └── decimal.rb            # Decimal type using BigDecimal
+    │   ├── base.rb               # Base type class + registry
+    │   ├── string.rb             # String type
+    │   ├── integer.rb            # Integer type
+    │   ├── float.rb              # Float type
+    │   ├── boolean.rb            # Boolean type
+    │   ├── array.rb              # Array type with item validation
+    │   ├── object.rb             # Object type for nested schemas
+    │   ├── date.rb               # Date type
+    │   ├── datetime.rb           # DateTime type
+    │   ├── time.rb               # Time type
+    │   ├── decimal.rb            # Decimal type (BigDecimal)
+    │   ├── union.rb              # Union type (multiple types)
+    │   ├── literal.rb            # Literal type (exact values)
+    │   └── discriminated_union.rb # Discriminated union type
     └── constraints/
         ├── base.rb               # Base constraint class + registry
-        ├── min.rb                # Minimum value/length constraint
-        ├── max.rb                # Maximum value/length constraint
-        ├── length.rb             # Exact/range/min/max length constraint
-        ├── format.rb             # Regex or named format (:email, :url, :uuid, etc.)
-        └── enum.rb               # Value in allowed list constraint
+        ├── min.rb                # Minimum value/length
+        ├── max.rb                # Maximum value/length
+        ├── length.rb             # Exact/range/min/max length
+        ├── format.rb             # Regex or named formats
+        └── enum.rb               # Value in allowed list
 
 spec/
 ├── spec_helper.rb
@@ -70,39 +89,22 @@ spec/
 │   ├── result_spec.rb
 │   ├── field_spec.rb
 │   ├── schema_spec.rb
-│   ├── types/
-│   │   ├── string_spec.rb
-│   │   ├── integer_spec.rb
-│   │   ├── float_spec.rb
-│   │   ├── boolean_spec.rb
-│   │   ├── array_spec.rb
-│   │   ├── object_spec.rb
-│   │   ├── date_spec.rb
-│   │   ├── datetime_spec.rb
-│   │   ├── time_spec.rb
-│   │   └── decimal_spec.rb
-│   └── constraints/
-│       ├── min_spec.rb
-│       ├── max_spec.rb
-│       ├── length_spec.rb
-│       ├── format_spec.rb
-│       └── enum_spec.rb
+│   ├── i18n_spec.rb
+│   ├── context_spec.rb
+│   ├── custom_type_spec.rb
+│   ├── serializer_spec.rb
+│   ├── introspection_spec.rb
+│   ├── openapi_spec.rb
+│   ├── types/*.rb
+│   └── constraints/*.rb
 └── integration/
     ├── basic_schema_spec.rb
     ├── nested_schema_spec.rb
-    └── phase2_features_spec.rb
+    ├── phase2_features_spec.rb
+    ├── phase3_features_spec.rb
+    ├── phase4_features_spec.rb
+    └── phase4_edge_cases_spec.rb
 ```
-
-## Key Design Decisions
-
-1. **Immutability**: All schemas, fields, types, constraints are frozen after creation
-2. **COERCION_FAILED sentinel**: Distinguishes failed coercion from nil values (`lib/validrb/types/base.rb:9`)
-3. **MISSING sentinel**: Distinguishes missing keys from nil values (`lib/validrb/field.rb:7`)
-4. **Self-registering types/constraints**: Each type/constraint registers itself (e.g., `Types.register(:string, String)`)
-5. **Type-aware constraints**: `min:/max:` means length for strings/arrays, value for numbers
-6. **Symbol/String key normalization**: Input accepts both, output always uses symbols
-7. **Path tracking**: Errors include full path like `[:user, :address, :city]`
-8. **Validators run after field validation**: Custom validators only execute if all fields pass
 
 ## API Reference
 
@@ -110,25 +112,67 @@ spec/
 
 ```ruby
 schema = Validrb.schema do
-  field :name, :string                          # Required field
-  field :age, :integer, optional: true          # Optional field
-  field :role, :string, default: "user"         # Default value
-  field :status, :string, enum: %w[a b c]       # Enum constraint
-  field :email, :string, format: :email         # Format constraint
-  field :bio, :string, min: 10, max: 500        # Min/max constraints
-  field :code, :string, length: 6               # Exact length
-  field :tags, :array, of: :string              # Typed array
-  field :address, :object, schema: AddrSchema   # Nested schema
-  field :nickname, :string, nullable: true      # Accepts nil
-  field :slug, :string, transform: ->(v) { v.downcase }  # Transform
+  # Basic fields
+  field :name, :string
+  field :age, :integer, optional: true
+  field :role, :string, default: "user"
 
-  optional :nickname, :string                   # Shorthand for optional: true
-  required :password, :string                   # Explicit required (default)
+  # Constraints
+  field :email, :string, format: :email
+  field :bio, :string, min: 10, max: 500
+  field :status, :string, enum: %w[active inactive]
 
-  # Custom validators (run after field validation)
-  validate do |data|
-    if data[:password] != data[:password_confirmation]
-      error(:password_confirmation, "doesn't match")
+  # Preprocessing (runs BEFORE validation)
+  field :username, :string, preprocess: ->(v) { v.strip.downcase }
+
+  # Transform (runs AFTER validation)
+  field :tags, :string, transform: ->(v) { v.split(",") }
+
+  # Nullable (accepts nil)
+  field :deleted_at, :datetime, nullable: true
+
+  # Union types (accepts multiple types)
+  field :id, :string, union: [:integer, :string]
+
+  # Literal types (exact values only)
+  field :priority, :integer, literal: [1, 2, 3]
+
+  # Refinements (custom predicates)
+  field :password, :string,
+        refine: [
+          { check: ->(v) { v.length >= 8 }, message: "must be 8+ chars" },
+          { check: ->(v) { v.match?(/\d/) }, message: "must contain digit" }
+        ]
+
+  # Context-aware refinement
+  field :amount, :decimal,
+        refine: ->(v, ctx) { ctx.nil? || v <= ctx[:max_amount] }
+
+  # Disable coercion
+  field :count, :integer, coerce: false
+
+  # Conditional validation (supports context)
+  field :company, :string, when: ->(d, ctx) { d[:account_type] == "business" }
+  field :personal_id, :string, unless: :is_company
+
+  # Custom error message
+  field :note, :string, min: 8, message: "must be at least 8 characters"
+
+  # Nested schema
+  field :address, :object, schema: AddressSchema
+
+  # Typed arrays
+  field :scores, :array, of: :integer
+
+  # Discriminated union
+  field :payment, :discriminated_union,
+        discriminator: :method,
+        mapping: { "card" => CardSchema, "paypal" => PaypalSchema }
+
+  # Custom validators (support context)
+  validate do |data, ctx|
+    if ctx && ctx[:restricted] && data[:amount] > 100
+      error(:amount, "exceeds limit in restricted mode")
     end
   end
 end
@@ -138,154 +182,248 @@ end
 
 ```ruby
 # Strict mode - reject unknown keys
-Validrb.schema(strict: true) do
-  field :name, :string
-end
+Validrb.schema(strict: true) { ... }
 
-# Passthrough mode - keep unknown keys in output
-Validrb.schema(passthrough: true) do
-  field :name, :string
-end
+# Passthrough mode - keep unknown keys
+Validrb.schema(passthrough: true) { ... }
 ```
 
-### Schema Composition
-
-```ruby
-# Extend schema with additional fields
-ExtendedSchema = BaseSchema.extend do
-  field :extra, :string
-end
-
-# Pick specific fields
-PublicSchema = FullSchema.pick(:id, :name, :email)
-
-# Omit fields
-SafeSchema = FullSchema.omit(:password, :secret)
-
-# Merge two schemas (second takes precedence)
-MergedSchema = Schema1.merge(Schema2)
-
-# Make all fields optional (useful for PATCH updates)
-UpdateSchema = CreateSchema.partial
-```
-
-### Parsing
-
-```ruby
-# Returns data or raises Validrb::ValidationError
-data = schema.parse(input)
-
-# Returns Validrb::Success or Validrb::Failure
-result = schema.safe_parse(input)
-result.success?          # true/false
-result.failure?          # true/false
-result.data              # validated hash (Success) or nil (Failure)
-result.errors            # ErrorCollection
-result.errors.to_h       # { "field.path" => ["message1", "message2"] }
-result.errors.full_messages  # ["field.path: message1", ...]
-```
-
-### Type Coercion Rules
-
-| Type | Accepts | Coerces From |
-|------|---------|--------------|
-| `:string` | String | Symbol, Numeric |
-| `:integer` | Integer | String ("42"), Float (42.0 only) |
-| `:float` | Float (finite) | String ("3.14"), Integer |
-| `:boolean` | true/false | "true"/"false", "yes"/"no", "on"/"off", "t"/"f", "y"/"n", "1"/"0", 1/0 |
-| `:array` | Array | - (validates items with `of:`) |
-| `:object` | Hash | - (validates with `schema:`) |
-| `:date` | Date | String (ISO8601), Time, DateTime, Integer (timestamp) |
-| `:datetime` | DateTime | String (ISO8601), Time, Date, Integer/Float (timestamp) |
-| `:time` | Time | String (ISO8601), DateTime, Date, Integer/Float (timestamp) |
-| `:decimal` | BigDecimal | String, Integer, Float, Rational |
-
-### Named Formats (lib/validrb/constraints/format.rb)
-
-- `:email` - Email addresses
-- `:url` - HTTP/HTTPS URLs
-- `:uuid` - UUID v4 format
-- `:phone` - Phone numbers (lenient)
-- `:alphanumeric` - Letters and numbers only
-- `:alpha` - Letters only
-- `:numeric` - Digits only
-- `:hex` - Hexadecimal characters
-- `:slug` - URL slugs (lowercase, hyphens)
-
-### Field Options
+### Field Options Reference
 
 | Option | Type | Description |
 |--------|------|-------------|
 | `optional` | Boolean | Field can be missing (default: false) |
 | `nullable` | Boolean | Field accepts nil value (default: false) |
 | `default` | Any/Proc | Default value when missing |
-| `message` | String | Custom error message for all errors |
-| `transform` | Proc | Transform value after validation |
+| `message` | String | Custom error message |
+| `preprocess` | Proc | Transform input BEFORE validation |
+| `transform` | Proc | Transform value AFTER validation |
+| `coerce` | Boolean | Enable type coercion (default: true) |
+| `when` | Proc/Symbol | Only validate if condition is true |
+| `unless` | Proc/Symbol | Only validate if condition is false |
+| `union` | Array | Accept any of these types |
+| `literal` | Array | Accept only these exact values |
+| `refine` | Proc/Array | Custom validation predicates |
 | `min` | Numeric | Minimum value/length |
 | `max` | Numeric | Maximum value/length |
-| `length` | Integer/Range/Hash | Exact or range length |
+| `length` | Int/Range/Hash | Length constraint |
 | `format` | Symbol/Regexp | Format validation |
 | `enum` | Array | Allowed values |
+| `of` | Symbol | Item type for arrays |
+| `schema` | Schema | Nested schema for objects |
+| `discriminator` | Symbol | Field for discriminated union |
+| `mapping` | Hash | Schemas for discriminated union |
 
-### Custom Validators
+### Type Coercion Rules
+
+| Type | Accepts | Coerces From |
+|------|---------|--------------|
+| `:string` | String | Symbol, Numeric |
+| `:integer` | Integer | String, Float (whole) |
+| `:float` | Float | String, Integer |
+| `:boolean` | true/false | "true"/"false", "yes"/"no", 1/0, etc. |
+| `:array` | Array | (validates items with `of:`) |
+| `:object` | Hash | (validates with `schema:`) |
+| `:date` | Date | ISO8601 String, Time, DateTime, timestamp |
+| `:datetime` | DateTime | ISO8601 String, Time, Date, timestamp |
+| `:time` | Time | ISO8601 String, DateTime, Date, timestamp |
+| `:decimal` | BigDecimal | String, Integer, Float, Rational |
+| `:union` | Any matching | Tries each type in order |
+| `:literal` | Exact value | No coercion, exact match only |
+| `:discriminated_union` | Object | Selects schema by discriminator field |
+
+### Named Formats
+
+`:email`, `:url`, `:uuid`, `:phone`, `:alphanumeric`, `:alpha`, `:numeric`, `:hex`, `:slug`
+
+### Schema Composition
 
 ```ruby
-schema = Validrb.schema do
-  field :start_date, :date
-  field :end_date, :date
+# Extend with additional fields
+UserSchema = BaseSchema.extend { field :name, :string }
 
-  validate do |data|
-    # Access fields via data hash or self[]
-    if data[:end_date] < data[:start_date]
-      error(:end_date, "must be after start date")
-    end
-  end
+# Pick specific fields
+PublicSchema = FullSchema.pick(:id, :name)
 
-  validate do
-    # Base-level error (not tied to field)
-    base_error("Invalid date range") if self[:start_date] > Date.today
-  end
+# Omit fields
+SafeSchema = FullSchema.omit(:password)
+
+# Merge schemas
+MergedSchema = Schema1.merge(Schema2)
+
+# Make all fields optional
+UpdateSchema = CreateSchema.partial
+```
+
+### I18n Configuration
+
+```ruby
+# Add custom translations
+Validrb::I18n.add_translations(:en, required: "cannot be blank")
+
+# Change locale
+Validrb::I18n.locale = :es
+
+# Add translations for other locales
+Validrb::I18n.add_translations(:es, required: "es requerido")
+
+# Use Rails I18n backend
+Validrb::I18n.backend = :rails
+```
+
+### Validation Context
+
+```ruby
+# Create a context
+ctx = Validrb.context(user_id: 123, is_admin: true, max_amount: 1000)
+
+# Pass context to parse
+result = schema.safe_parse(data, context: ctx)
+
+# Context is available in refinements, conditions, transforms, and validators
+field :amount, :decimal, refine: ->(v, ctx) { v <= ctx[:max_amount] }
+field :admin_only, :string, when: ->(data, ctx) { ctx[:is_admin] }
+```
+
+### Custom Types
+
+```ruby
+# Define a custom type
+Validrb.define_type(:money) do
+  coerce { |v| BigDecimal(v.to_s.gsub(/[$,]/, "")) }
+  validate { |v| v >= 0 }
+  error_message { "must be a valid money amount" }
 end
+
+# Use in schemas
+field :price, :money
+```
+
+### Schema Introspection
+
+```ruby
+# Field inspection
+schema.field_names          # => [:id, :name, :email]
+schema.required_fields      # => [:id, :name]
+schema.optional_fields      # => [:age]
+schema.fields_with_defaults # => [:role]
+schema.conditional_fields   # => [:company]
+
+# Field details
+field = schema.field(:name)
+field.constraint_values     # => { min: 1, max: 100 }
+field.has_constraint?(Validrb::Constraints::Min) # => true
+
+# Generate JSON Schema
+schema.to_json_schema       # => { "$schema": "...", "type": "object", ... }
+```
+
+### Serialization
+
+```ruby
+# Parse and serialize to hash with primitives
+result = schema.safe_parse(data)
+result.dump                  # => { "name" => "John", "date" => "2024-01-15" }
+result.dump(format: :json)   # => '{"name":"John","date":"2024-01-15"}'
+result.to_json               # Same as dump(format: :json)
+
+# Schema-level serialization
+schema.dump(data)            # Parse + serialize (raises on error)
+schema.safe_dump(data)       # Parse + serialize (returns Result)
+```
+
+### Validation Flow
+
+```
+Input Value
+    │
+    ▼
+┌─────────────────┐
+│ Conditional?    │──No──┐
+│ (when:/unless:) │      │
+└────────┬────────┘      │
+         │Yes            │
+         ▼               │
+┌─────────────────┐      │
+│ Should validate?│──No──┼──► Skip (return nil)
+└────────┬────────┘      │
+         │Yes            │
+         ▼               │
+┌─────────────────┐      │
+│ Preprocess      │◄─────┘
+│ (before coerce) │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Type Coercion   │──► coerce: false? → Type Check Only
+│ (if enabled)    │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Constraints     │
+│ (min/max/etc)   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Transform       │
+│ (after valid)   │
+└────────┬────────┘
+         │
+         ▼
+    Output Value
 ```
 
 ## Running Tests
 
 ```bash
 bundle install
-bundle exec rspec           # Run all tests
-bundle exec rspec --format doc  # Verbose output
+bundle exec rspec              # Run all tests
+bundle exec rspec --format doc # Verbose output
 ```
 
-## Phase 1 Features (v0.1.0) ✓
+## Version History
 
-- [x] Basic types (string, integer, float, boolean, array, object)
-- [x] Constraints (min, max, length, format, enum)
-- [x] Schema DSL with field definitions
-- [x] Type coercion
-- [x] Nested schema validation
-- [x] Path-tracked errors
-- [x] parse() and safe_parse() methods
+### Phase 1 (v0.1.0)
+- Basic types (string, integer, float, boolean, array, object)
+- Constraints (min, max, length, format, enum)
+- Schema DSL, type coercion, nested validation
+- Error path tracking, parse/safe_parse
 
-## Phase 2 Features (v0.2.0) ✓
+### Phase 2 (v0.2.0)
+- Custom validators (cross-field validation)
+- Custom error messages
+- Date/DateTime/Time types
+- Decimal type (BigDecimal)
+- Schema composition (extend, merge, pick, omit, partial)
+- Unknown keys handling (strict/passthrough)
+- Transforms (post-validation)
+- Nullable fields
 
-- [x] Custom validators (cross-field validation)
-- [x] Custom error messages per field
-- [x] Date/DateTime/Time types
-- [x] Decimal type (BigDecimal)
-- [x] Schema composition (extend, merge, pick, omit, partial)
-- [x] Unknown keys handling (strict/passthrough modes)
-- [x] Transforms (post-validation data transformation)
-- [x] Nullable type (explicit nil handling)
+### Phase 3 (v0.3.0)
+- Preprocessing (pre-validation transformation)
+- Conditional validation (when:/unless:)
+- Union types (multiple type acceptance)
+- Coercion modes (disable per-field)
+- I18n support (internationalized errors)
 
-## Future Enhancements (Phase 3+)
+### Phase 4 (v0.4.0)
+- Literal types (exact value matching)
+- Refinements (custom validation predicates)
+- Validation context (request-level data)
+- Schema introspection (field inspection, JSON Schema generation)
+- Custom type API (define_type DSL)
+- Discriminated unions (type selection by discriminator)
+- Serialization (dump to primitives/JSON)
 
-- [ ] Async validators (for database checks)
-- [ ] Conditional validation (when: / unless:)
-- [ ] Custom type registration API
+## Future Enhancements
+
+- [ ] Async validators (database checks)
 - [ ] Rails integration (ActiveModel compatibility)
-- [ ] Serialization (to_json, to_hash)
 - [ ] OpenAPI schema generation
-- [ ] I18n support for error messages
+- [ ] Dependent field validation DSL
 
 ## Code Conventions
 

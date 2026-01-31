@@ -5,6 +5,7 @@ module Validrb
     # Validates value is in an allowed list
     class Enum < Base
       attr_reader :allowed
+      alias values allowed
 
       def initialize(allowed)
         @allowed = Array(allowed).freeze

@@ -5,7 +5,7 @@ require "spec_helper"
 RSpec.describe Validrb do
   it "has a version number" do
     expect(Validrb::VERSION).not_to be_nil
-    expect(Validrb::VERSION).to eq("0.2.0")
+    expect(Validrb::VERSION).to eq("0.5.0")
   end
 
   describe ".schema" do
