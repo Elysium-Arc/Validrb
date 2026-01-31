@@ -32,7 +32,9 @@ jobs:
         run: bundle install
 
       - name: Run tests
-        run: bundle exec rspec --format progress --format RspecJunitFormatter --out tmp/rspec_results.xml
+        run: |
+          mkdir -p tmp
+          bundle exec rspec --format progress --format RspecJunitFormatter --out tmp/rspec_results.xml
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -40,6 +42,7 @@ jobs:
         with:
           name: test-results-ruby-${{ matrix.ruby-version }}
           path: tmp/rspec_results.xml
+          if-no-files-found: ignore
 
   lint:
     runs-on: ubuntu-latest
