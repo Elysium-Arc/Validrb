@@ -18,7 +18,7 @@ A powerful Ruby schema validation library with type coercion, inspired by Pydant
 - **I18n Support** - Internationalized error messages
 - **JSON Schema Generation** - Export schemas to JSON Schema format
 - **Serialization** - Convert validated data to JSON-ready primitives
-- **Zero Dependencies** - Pure Ruby, no external runtime dependencies
+- **Rails Integration** - Form objects, controller helpers, and ActiveRecord support
 
 ## Installation
 
@@ -521,6 +521,136 @@ json_schema = schema.to_json_schema
 #     "role" => { "type" => "string", "enum" => ["admin", "user"], "default" => "user" }
 #   }
 # }
+```
+
+## Rails Integration
+
+Validrb integrates seamlessly with Rails applications, providing form objects, controller helpers, and ActiveRecord validation.
+
+### Setup
+
+```ruby
+# Gemfile
+gem 'validrb'
+
+# config/initializers/validrb.rb (optional - auto-configured with Railtie)
+require 'validrb/rails'
+```
+
+### Form Objects
+
+Create form objects that work with Rails form helpers:
+
+```ruby
+class UserForm < Validrb::Rails::FormObject
+  schema do
+    field :name, :string, min: 2, max: 100
+    field :email, :string, format: :email
+    field :age, :integer, optional: true
+    field :newsletter, :boolean, default: false
+  end
+end
+
+# In controller
+def new
+  @user_form = UserForm.new
+end
+
+def create
+  @user_form = UserForm.new(user_params)
+  if @user_form.valid?
+    User.create!(@user_form.attributes)
+    redirect_to users_path
+  else
+    render :new, status: :unprocessable_entity
+  end
+end
+
+private
+
+def user_params
+  params.require(:user).permit(:name, :email, :age, :newsletter)
+end
+```
+
+```erb
+<%# Works with Rails form helpers %>
+<%= form_with model: @user_form, url: users_path do |f| %>
+  <% if @user_form.errors.any? %>
+    <div class="errors">
+      <% @user_form.errors.full_messages.each do |msg| %>
+        <p><%= msg %></p>
+      <% end %>
+    </div>
+  <% end %>
+
+  <%= f.text_field :name %>
+  <%= f.email_field :email %>
+  <%= f.number_field :age %>
+  <%= f.check_box :newsletter %>
+  <%= f.submit %>
+<% end %>
+```
+
+### Controller Helpers
+
+Validate params directly in controllers:
+
+```ruby
+class UsersController < ApplicationController
+  include Validrb::Rails::Controller  # Auto-included with Railtie
+
+  UserSchema = Validrb.schema do
+    field :name, :string, min: 2
+    field :email, :string, format: :email
+  end
+
+  def create
+    # Returns Validrb::Result
+    result = validate_params(UserSchema, :user)
+
+    if result.success?
+      @user = User.create!(result.data)
+      redirect_to @user
+    else
+      @errors = result.errors
+      render :new, status: :unprocessable_entity
+    end
+  end
+
+  # Or use validate_params! which raises on failure
+  def update
+    data = validate_params!(UserSchema, :user)
+    @user.update!(data)
+    redirect_to @user
+  rescue Validrb::Rails::Controller::ValidationError => e
+    @errors = e.errors
+    render :edit, status: :unprocessable_entity
+  end
+end
+```
+
+### ActiveRecord Integration
+
+Add schema validation to ActiveRecord models:
+
+```ruby
+class User < ApplicationRecord
+  include Validrb::Rails::Model
+
+  validates_with_schema do
+    field :name, :string, min: 2, max: 100
+    field :email, :string, format: :email
+    field :age, :integer, min: 0, optional: true
+  end
+end
+
+# Or use an existing schema
+class User < ApplicationRecord
+  include Validrb::Rails::Model
+
+  validates_with_schema UserSchema, only: [:name, :email]
+end
 ```
 
 ## OpenAPI 3.0 Generation

@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.6.0] - 2024-01-31
 
 ### Added
+- **Rails Integration** - Full Rails support with form objects, controller helpers, and ActiveRecord validation
+  - `Validrb::Rails::FormObject` - ActiveModel-compatible form objects for Rails forms
+  - `Validrb::Rails::Controller` - Controller helpers (`validate_params`, `validate_params!`, `build_form`)
+  - `Validrb::Rails::Model` - ActiveRecord integration with `validates_with_schema`
+  - `Validrb::Rails::ErrorConverter` - Convert Validrb errors to ActiveModel::Errors
+  - Auto-configuration via Rails Railtie
 - **Inline nested schemas** - Define nested schemas directly in field blocks
   ```ruby
   field :address, :object do
@@ -33,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   schema.safe_parse({ name: "John" })  # Hash syntax
   schema.safe_parse(name: "John")      # Kwargs syntax (new)
   ```
+- Added `bigdecimal` as explicit dependency (required for Ruby 3.4+)
 
 ## [0.5.0] - 2024-01-15
 

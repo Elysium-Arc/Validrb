@@ -13,4 +13,8 @@ group :development, :test do
   gem "rspec_junit_formatter", "~> 0.6"
   gem "rubocop", "~> 1.50"
   gem "rubocop-rspec", "~> 2.20"
+
+  # For Rails integration tests
+  gem "activemodel", "~> 7.0"
+  gem "activesupport", "~> 7.0"
 end
