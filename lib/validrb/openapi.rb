@@ -82,7 +82,124 @@ module Validrb
         YAML.dump(generate(info: info, **options))
       end
 
+      # ============================================================
+      # Convenience Methods
+      # ============================================================
+
+      # Generate a request body structure for a schema
+      # @param schema [Validrb::Schema] The schema to use
+      # @param required [Boolean] Whether the request body is required (default: true)
+      # @param content_type [String] The content type (default: "application/json")
+      # @return [Hash] OpenAPI request body object
+      def request_body(schema, required: true, content_type: "application/json")
+        {
+          "required" => required,
+          "content" => {
+            content_type => {
+              "schema" => schema_to_openapi(schema)
+            }
+          }
+        }
+      end
+
+      # Generate query parameters from a schema
+      # @param schema [Validrb::Schema] The schema to convert to parameters
+      # @return [Array<Hash>] Array of OpenAPI parameter objects
+      def query_params(schema)
+        schema.fields.map do |name, field|
+          {
+            "name" => name.to_s,
+            "in" => "query",
+            "required" => field.required? && !field.has_default? && !field.conditional?,
+            "schema" => field_to_openapi(field)
+          }
+        end
+      end
+
+      # Generate path parameters from field names
+      # @param names [Array<Symbol, String>] Parameter names
+      # @param types [Hash] Optional type overrides { name: :integer }
+      # @return [Array<Hash>] Array of OpenAPI parameter objects
+      def path_params(*names, types: {})
+        names.map do |name|
+          type = types[name.to_sym] || :string
+          {
+            "name" => name.to_s,
+            "in" => "path",
+            "required" => true,
+            "schema" => primitive_type_schema(type)
+          }
+        end
+      end
+
+      # Generate a response schema structure
+      # @param schema [Validrb::Schema] The schema for the response
+      # @param description [String] Response description
+      # @param content_type [String] The content type (default: "application/json")
+      # @return [Hash] OpenAPI response object
+      def response_schema(schema, description: "Successful response", content_type: "application/json")
+        {
+          "description" => description,
+          "content" => {
+            content_type => {
+              "schema" => schema_to_openapi(schema)
+            }
+          }
+        }
+      end
+
+      # Generate a simple response without body
+      # @param description [String] Response description
+      # @return [Hash] OpenAPI response object
+      def response(description)
+        { "description" => description }
+      end
+
+      # Generate error response structure
+      # @param description [String] Error description
+      # @return [Hash] OpenAPI response object with standard error schema
+      def error_response(description: "Validation error")
+        {
+          "description" => description,
+          "content" => {
+            "application/json" => {
+              "schema" => {
+                "type" => "object",
+                "properties" => {
+                  "error" => { "type" => "string" },
+                  "details" => {
+                    "type" => "array",
+                    "items" => {
+                      "type" => "object",
+                      "properties" => {
+                        "path" => { "type" => "string" },
+                        "message" => { "type" => "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      end
+
       private
+
+      def primitive_type_schema(type)
+        case type.to_sym
+        when :string
+          { "type" => "string" }
+        when :integer
+          { "type" => "integer" }
+        when :float, :number
+          { "type" => "number" }
+        when :boolean
+          { "type" => "boolean" }
+        else
+          { "type" => "string" }
+        end
+      end
 
       def normalize_info(info)
         info = info.transform_keys(&:to_s)

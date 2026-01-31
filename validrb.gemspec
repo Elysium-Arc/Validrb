@@ -13,7 +13,6 @@ Gem::Specification.new do |spec|
     Validrb is a powerful Ruby schema validation library inspired by Pydantic and Zod.
     It provides type coercion, rich constraints, schema composition, union types,
     discriminated unions, custom validators, JSON Schema generation, and serialization.
-    Zero runtime dependencies, pure Ruby.
   DESC
   spec.homepage = 'http://github.com/Elysium-Arc/Validrb'
   spec.license = 'MIT'
@@ -39,5 +38,6 @@ Gem::Specification.new do |spec|
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ['lib']
 
-  # Zero runtime dependencies - pure Ruby
+  # bigdecimal is used for Decimal type - required explicitly for Ruby 3.4+
+  spec.add_dependency 'bigdecimal'
 end

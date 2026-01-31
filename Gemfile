@@ -4,6 +4,9 @@ source "https://rubygems.org"
 
 gemspec
 
+# Required for Ruby 3.4+ (no longer in default gems)
+gem "bigdecimal"
+
 group :development, :test do
   gem "rake", "~> 13.0"
   gem "rspec", "~> 3.12"

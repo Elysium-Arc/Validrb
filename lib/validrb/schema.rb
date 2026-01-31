@@ -21,11 +21,13 @@ module Validrb
     end
 
     # Parse data and raise ValidationError on failure
-    # @param data [Hash] The data to validate
+    # @param data [Hash] The data to validate (can be passed as positional arg or kwargs)
     # @param path_prefix [Array] Path prefix for error messages
     # @param context [Context, Hash, nil] Optional validation context
-    def parse(data, path_prefix: [], context: nil)
-      result = safe_parse(data, path_prefix: path_prefix, context: context)
+    def parse(data = nil, path_prefix: [], context: nil, **data_kwargs)
+      # Support both parse({ name: 'John' }) and parse(name: 'John')
+      actual_data = data.nil? ? data_kwargs : data
+      result = safe_parse(actual_data, path_prefix: path_prefix, context: context)
 
       raise ValidationError, result.errors if result.failure?
 
@@ -33,11 +35,13 @@ module Validrb
     end
 
     # Parse data and return Result (Success or Failure)
-    # @param data [Hash] The data to validate
+    # @param data [Hash] The data to validate (can be passed as positional arg or kwargs)
     # @param path_prefix [Array] Path prefix for error messages
     # @param context [Context, Hash, nil] Optional validation context
-    def safe_parse(data, path_prefix: [], context: nil)
-      normalized = normalize_input(data)
+    def safe_parse(data = nil, path_prefix: [], context: nil, **data_kwargs)
+      # Support both safe_parse({ name: 'John' }) and safe_parse(name: 'John')
+      actual_data = data.nil? ? data_kwargs : data
+      normalized = normalize_input(actual_data)
       ctx = normalize_context(context)
       errors = []
       result_data = {}
@@ -279,19 +283,45 @@ module Validrb
         @schema = schema
       end
 
-      def field(name, type, **options)
+      # Define a field with optional inline schema block
+      # @example Basic field
+      #   field :name, :string
+      # @example Object with inline schema
+      #   field :address, :object do
+      #     field :street, :string
+      #     field :city, :string
+      #   end
+      # @example Array with inline item schema
+      #   field :items, :array do
+      #     field :product_id, :integer
+      #     field :quantity, :integer
+      #   end
+      def field(name, type, **options, &block)
+        if block_given?
+          # Create inline nested schema from block
+          inline_schema = Schema.new(&block)
+
+          case type
+          when :object, :hash
+            options[:schema] = inline_schema
+          when :array
+            # For arrays, the block defines the item schema
+            options[:of] = inline_schema
+          end
+        end
+
         field = Field.new(name, type, **options)
         @schema.add_field(field)
       end
 
       # Shorthand for optional field
-      def optional(name, type, **options)
-        field(name, type, **options.merge(optional: true))
+      def optional(name, type, **options, &block)
+        field(name, type, **options.merge(optional: true), &block)
       end
 
       # Shorthand for required field (explicit)
-      def required(name, type, **options)
-        field(name, type, **options.merge(optional: false))
+      def required(name, type, **options, &block)
+        field(name, type, **options.merge(optional: false), &block)
       end
 
       # Add a custom validator block

@@ -128,6 +128,45 @@ schema = Validrb.schema do
 end
 ```
 
+### Inline Nested Schemas (v0.6.0+)
+
+Define nested schemas directly without creating separate schema objects:
+
+```ruby
+schema = Validrb.schema do
+  field :name, :string
+
+  # Inline object schema
+  field :address, :object do
+    field :street, :string
+    field :city, :string
+    field :zip, :string, format: /\A\d{5}\z/
+  end
+
+  # Inline array item schema
+  field :items, :array do
+    field :product_id, :integer
+    field :quantity, :integer, min: 1
+  end
+end
+```
+
+### Array of Schemas Shorthand (v0.6.0+)
+
+Pass schema instances directly to `of:`:
+
+```ruby
+ItemSchema = Validrb.schema do
+  field :id, :integer
+  field :name, :string
+end
+
+schema = Validrb.schema do
+  # Pass schema directly - no wrapper needed
+  field :items, :array, of: ItemSchema
+end
+```
+
 ## Constraints
 
 ```ruby

@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2024-01-31
+
+### Added
+- **Inline nested schemas** - Define nested schemas directly in field blocks
+  ```ruby
+  field :address, :object do
+    field :street, :string
+    field :city, :string
+  end
+  ```
+- **Array of schemas shorthand** - Pass Schema instances directly to `of:` option
+  ```ruby
+  field :items, :array, of: ItemSchema  # No wrapper needed
+  ```
+- **OpenAPI convenience methods** on Generator:
+  - `request_body(schema)` - Generate request body structure
+  - `query_params(schema)` - Convert schema to query parameters
+  - `path_params(*names)` - Generate path parameters
+  - `response_schema(schema)` - Generate response with schema
+  - `response(description)` - Generate simple response
+  - `error_response` - Generate standard error response structure
+
+### Changed
+- `parse` and `safe_parse` now accept both hash and kwargs syntax:
+  ```ruby
+  schema.safe_parse({ name: "John" })  # Hash syntax
+  schema.safe_parse(name: "John")      # Kwargs syntax (new)
+  ```
+
 ## [0.5.0] - 2024-01-15
 
 ### Added
@@ -92,6 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires Ruby >= 3.0
 - Inspired by Pydantic (Python) and Zod (TypeScript)
 
+[0.6.0]: https://github.com/validrb/validrb/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/validrb/validrb/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/validrb/validrb/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/validrb/validrb/compare/v0.2.0...v0.3.0

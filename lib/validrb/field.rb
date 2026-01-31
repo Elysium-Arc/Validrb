@@ -137,7 +137,13 @@ module Validrb
     def extract_type_options(type, options)
       case type
       when :array
-        { of: options[:of] }.compact
+        of_option = options[:of]
+        # If of: is a Schema, wrap it in an Object type
+        if of_option.is_a?(Schema)
+          { of: Types::Object.new(schema: of_option) }
+        else
+          { of: of_option }.compact
+        end
       when :object, :hash
         { schema: options[:schema] }.compact
       when :discriminated_union

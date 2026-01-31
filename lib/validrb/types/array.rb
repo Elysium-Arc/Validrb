@@ -67,6 +67,9 @@ module Validrb
           @item_type
         when Class
           @item_type.new
+        when ::Validrb::Schema
+          # Schema instance - wrap in Object type
+          Types::Object.new(schema: @item_type)
         else
           raise ArgumentError, "Invalid item type: #{@item_type.inspect}"
         end
@@ -80,6 +83,8 @@ module Validrb
           @item_type.type_name
         when Class
           @item_type.name.split("::").last.downcase
+        when ::Validrb::Schema
+          "object"
         else
           "unknown"
         end
