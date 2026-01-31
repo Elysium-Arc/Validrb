@@ -1,0 +1,12 @@
+# frozen_string_literal: true
+
+<%= schema_class_name %> = Validrb.schema do
+<% parsed_attributes.each do |attr| -%>
+  field :<%= attr[:name] %>, <%= attr[:type] %><%= attr[:options].empty? ? '' : ", #{attr[:options]}" %>
+<% end -%>
+<% if parsed_attributes.empty? -%>
+  # Add your fields here
+  # field :name, :string, min: 2
+  # field :email, :string, format: :email
+<% end -%>
+end

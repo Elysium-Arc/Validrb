@@ -14,6 +14,9 @@ require_relative "rails/error_converter"
 require_relative "rails/form_object"
 require_relative "rails/controller"
 require_relative "rails/model"
+require_relative "rails/strong_params"
+require_relative "rails/api_error_response"
+require_relative "rails/attribute_coercion"
 
 module Validrb
   # Rails integration for Validrb

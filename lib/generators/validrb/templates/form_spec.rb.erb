@@ -1,0 +1,49 @@
+# frozen_string_literal: true
+
+require "rails_helper"
+
+RSpec.describe <%= form_class_name %> do
+  describe "validations" do
+<% parsed_attributes.each do |attr| -%>
+    describe "#<%= attr[:name] %>" do
+      it "is valid with proper value" do
+        # Add your test here
+      end
+    end
+
+<% end -%>
+  end
+
+  describe "#valid?" do
+    context "with valid attributes" do
+      it "returns true" do
+        form = described_class.new(
+<% parsed_attributes.each_with_index do |attr, i| -%>
+          <%= attr[:name] %>: nil<%= i < parsed_attributes.length - 1 ? ',' : '' %>
+<% end -%>
+        )
+        # expect(form.valid?).to be true
+      end
+    end
+
+    context "with invalid attributes" do
+      it "returns false and populates errors" do
+        form = described_class.new({})
+        # expect(form.valid?).to be false
+        # expect(form.errors).not_to be_empty
+      end
+    end
+  end
+
+  describe "#attributes" do
+    it "returns coerced attributes after validation" do
+      form = described_class.new(
+<% parsed_attributes.each_with_index do |attr, i| -%>
+        <%= attr[:name] %>: nil<%= i < parsed_attributes.length - 1 ? ',' : '' %>
+<% end -%>
+      )
+      form.valid?
+      # expect(form.attributes).to include(...)
+    end
+  end
+end

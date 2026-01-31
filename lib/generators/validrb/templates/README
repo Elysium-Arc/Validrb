@@ -1,0 +1,59 @@
+===============================================================================
+
+Validrb has been installed!
+
+Created:
+  - config/initializers/validrb.rb  (configuration)
+  - app/forms/application_form.rb   (base form class)
+  - app/forms/                      (form objects directory)
+  - app/schemas/                    (schema definitions directory)
+
+Quick Start:
+
+1. Create a form object:
+
+   # app/forms/user_form.rb
+   class UserForm < ApplicationForm
+     schema do
+       field :name, :string, min: 2
+       field :email, :string, format: :email
+       field :password, :string, min: 8
+     end
+   end
+
+2. Use in controller:
+
+   class UsersController < ApplicationController
+     def create
+       @form = UserForm.new(user_params)
+       if @form.valid?
+         @user = User.create!(@form.attributes)
+         redirect_to @user
+       else
+         render :new, status: :unprocessable_entity
+       end
+     end
+
+     private
+
+     def user_params
+       params.require(:user).permit(:name, :email, :password)
+     end
+   end
+
+3. Use in views:
+
+   <%= form_with model: @form, url: users_path do |f| %>
+     <%= f.text_field :name %>
+     <%= f.email_field :email %>
+     <%= f.password_field :password %>
+     <%= f.submit %>
+   <% end %>
+
+Generate more forms:
+
+   rails g validrb:form RegistrationForm name:string email:string:email
+
+Documentation: https://github.com/your-repo/validrb
+
+===============================================================================

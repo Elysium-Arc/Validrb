@@ -37,6 +37,10 @@ module Validrb
     module Controller
       extend ActiveSupport::Concern
 
+      included do
+        include StrongParams if defined?(StrongParams)
+      end
+
       class ValidationError < StandardError
         attr_reader :errors, :result
 
